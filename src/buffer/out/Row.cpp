@@ -265,11 +265,16 @@ void ROW::TransferAttributes(const til::small_rle<TextAttribute, uint16_t, 1>& a
 
 void ROW::CopyFrom(const ROW& source)
 {
-    RowCopyTextFromState state{ .source = source };
-    CopyTextFrom(state);
-    TransferAttributes(source.Attributes(), _columnCount);
     _lineRendition = source._lineRendition;
     _wrapForced = source._wrapForced;
+
+    RowCopyTextFromState state{
+        .source = source,
+        .columnLimit = LineRenditionColumns(),
+    };
+    CopyTextFrom(state);
+
+    TransferAttributes(source.Attributes(), _columnCount);
 }
 
 // Returns the previous possible cursor position, preceding the given column.
@@ -866,6 +871,16 @@ til::CoordType ROW::MeasureLeft() const noexcept
 
 til::CoordType ROW::MeasureRight() const noexcept
 {
+    if (_wrapForced)
+    {
+        auto width = _columnCount;
+        if (_doubleBytePadded)
+        {
+            width--;
+        }
+        return width;
+    }
+
     const auto text = GetText();
     const auto beg = text.begin();
     const auto end = text.end();
