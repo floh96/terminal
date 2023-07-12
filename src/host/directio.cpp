@@ -101,7 +101,7 @@ using Microsoft::Console::Interactivity::ServiceLocator;
 // Return Value:
 // - HRESULT indicating success or failure
 [[nodiscard]] static HRESULT _WriteConsoleInputWImplHelper(InputBuffer& context,
-                                                           std::deque<std::unique_ptr<IInputEvent>>& events,
+                                                           const std::span<const INPUT_RECORD>& events,
                                                            size_t& written,
                                                            const bool append) noexcept
 {
@@ -151,13 +151,13 @@ try
     auto Unlock = wil::scope_exit([&] { UnlockConsole(); });
 
     const auto& gci = ServiceLocator::LocateGlobals().getConsoleInformation();
-    til::small_vector<INPUT_RECORD, 16> events;
+    InputEventQueue events;
 
     // Check out the loop below. When a previous call ended on a leading DBCS we store it for
     // the next call to WriteConsoleInputAImpl to join it with the now available trailing DBCS.
     if (context.IsWritePartialByteSequenceAvailable())
     {
-        auto lead = context.FetchWritePartialByteSequence(false)->ToInputRecord();
+        auto lead = context.FetchWritePartialByteSequence();
         const auto& trail = buffer.front();
 
         if (trail.EventType == KEY_EVENT)
@@ -195,7 +195,7 @@ try
             if (it == end)
             {
                 // Missing trailing DBCS -> Store the lead for the next call to WriteConsoleInputAImpl.
-                context.StoreWritePartialByteSequence(IInputEvent::Create(lead));
+                context.StoreWritePartialByteSequence(lead);
                 break;
             }
 
@@ -220,8 +220,7 @@ try
         }
     }
 
-    auto result = IInputEvent::Create(std::span{events.data(), events.size()});
-    return _WriteConsoleInputWImplHelper(context, result, written, append);
+    return _WriteConsoleInputWImplHelper(context, events, written, append);
 }
 CATCH_RETURN();
 
@@ -247,9 +246,7 @@ CATCH_RETURN();
 
     try
     {
-        auto events = IInputEvent::Create(buffer);
-
-        return _WriteConsoleInputWImplHelper(context, events, written, append);
+        return _WriteConsoleInputWImplHelper(context, buffer, written, append);
     }
     CATCH_RETURN();
 }
